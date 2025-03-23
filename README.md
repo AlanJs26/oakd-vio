@@ -45,7 +45,7 @@ docker compose build
 
 ```bash
 docker compose up -d
-docker compose exec vio ./build/oakdvio /kitti-dataset/sequences/00 ./src/violib/calibration/kitti00.yaml 
+docker compose exec oak_vio ./build/oakdvio /kitti-dataset/dataset/sequences/00 ./src/violib/calibration/kitti00.yaml 
 ```
 
 > To be able to run using the KITTI dataset you must first check the configured volumes at `docker-compose.yaml`

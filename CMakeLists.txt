@@ -5,6 +5,7 @@ set(TARGET_NAME oakdvio)
 project(${TARGET_NAME})
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 add_subdirectory(src)
 
