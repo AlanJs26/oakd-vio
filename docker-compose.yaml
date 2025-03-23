@@ -1,0 +1,39 @@
+services:
+  oak_vio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - CORES=2
+    container_name: oak_vio
+    stdin_open: true
+    tty: true
+    privileged: true
+    network_mode: host
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    device_cgroup_rules:
+      - 'c 189:* rmw'
+    environment:
+      - "DISPLAY=$DISPLAY"
+      - "QT_X11_NO_MITSHM=1"
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - OMP_WAIT_POLICY=passive
+    volumes:
+      - ${HOME}/.Xauthority:/root/.Xauthority:rw # X11 stuff
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw # X11 stuff
+      - /dev/dri:/dev/dri #X11 stuff
+      - /dev/snd:/dev/snd #X11 stuff
+      - /dev/bus/usb:/dev/bus/usb
+
+      - ./CMakeLists.txt:/root/dev/CMakeLists.txt
+      - ./.clang-format:/root/dev/.clang-format
+      - ./.gitignore:/root/dev/.gitignore
+      - ./src:/root/dev/src
+
+      - ../kitti-dataset/:/kitti-dataset
+
+    # This command keeps the container running even when there are no other processes running
+    command: ["tail", "-f", "/dev/null"]
