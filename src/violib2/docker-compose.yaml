@@ -1,0 +1,28 @@
+services:
+
+  odometry:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: odometry
+    stdin_open: true
+    tty: true
+    
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfined
+    environment:
+      - DISPLAY=:0
+      - "QT_X11_NO_MITSHM=1"
+    volumes:
+      - ${HOME}/.Xauthority:/home/dev/.Xauthority:rw # X11 stuff
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw # X11 stuff
+      - /dev/dri:/dev/dri #X11 stuff
+      - /dev/snd:/dev/snd #X11 stuff
+      - /mnt/DiscoExterno/kitti-dataset/dataset/:/data/kitti/odometry/dataset
+      - /mnt/DiscoExterno/kitti-dataset/calibration/:/data/kitti/odometry/calibration
+      - /mnt/DiscoExterno/kitti-dataset/poses/:/data/kitti/odometry/poses
+      # - .:/home/dev/soft-slam:rw
+
+    command: ./build/run /data/kitti/odometry/dataset/sequences/00/ /data/kitti/odometry/calibration/kitti00.yaml /data/kitti/odometry/poses/00.txt
+    # command: bash
