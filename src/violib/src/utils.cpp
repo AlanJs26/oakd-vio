@@ -19,9 +19,10 @@ void display(int frame_id, cv::Mat &trajectory, cv::Mat &pose, float fps) {
 }
 
 void display(int frame_id, cv::Mat &trajectory, cv::Mat &pose, std::vector<Matrix> &pose_matrix_gt, float fps, bool show_gt) {
+  int scaling = 2;
   // draw estimated trajectory
-  int x = int(pose.at<double>(0)) + 300;
-  int y = int(pose.at<double>(2)) + 100;
+  int x = int(pose.at<double>(0)) * scaling + 300;
+  int y = int(pose.at<double>(2)) * scaling + 100;
   circle(trajectory, cv::Point(x, y), 1, CV_RGB(255, 0, 0), 2);
 
   if (show_gt) {

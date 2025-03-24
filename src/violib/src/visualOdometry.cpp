@@ -65,19 +65,20 @@ void removeInvalidPoints(std::vector<cv::Point2f> &points, const std::vector<boo
   }
 }
 
-void matchingFeatures(cv::Mat &imageLeft_t0, cv::Mat &imageRight_t0, cv::Mat &imageLeft_t1, cv::Mat &imageRight_t1, FeatureSet &currentVOFeatures,
-                      std::vector<cv::Point2f> &pointsLeft_t0, std::vector<cv::Point2f> &pointsRight_t0, std::vector<cv::Point2f> &pointsLeft_t1,
-                      std::vector<cv::Point2f> &pointsRight_t1) {
+void matchingFeatures(cv::Mat &imageLeft_t0, cv::Mat &imageRight_t0,                                     //
+                      cv::Mat &imageLeft_t1, cv::Mat &imageRight_t1,                                     //
+                      FeatureSet &currentVOFeatures,                                                     //
+                      std::vector<cv::Point2f> &pointsLeft_t0, std::vector<cv::Point2f> &pointsRight_t0, //
+                      std::vector<cv::Point2f> &pointsLeft_t1, std::vector<cv::Point2f> &pointsRight_t1) {
   // ----------------------------
   // Feature detection using FAST
   // ----------------------------
   std::vector<cv::Point2f> pointsLeftReturn_t0; // feature points to check cicular mathcing validation
 
   if (currentVOFeatures.size() < 2000) {
-
     // append new features with old features
     appendNewFeatures(imageLeft_t0, currentVOFeatures);
-    // std::cout << "Current feature set size: " << currentVOFeatures.points.size() << std::endl;
+    std::cout << "Current feature set size: " << currentVOFeatures.points.size() << std::endl;
   }
 
   // --------------------------------------------------------
@@ -93,8 +94,11 @@ void matchingFeatures(cv::Mat &imageLeft_t0, cv::Mat &imageRight_t0, cv::Mat &im
   circularMatching_gpu(imageLeft_t0, imageRight_t0, imageLeft_t1, imageRight_t1, pointsLeft_t0, pointsRight_t0, pointsLeft_t1, pointsRight_t1,
                        pointsLeftReturn_t0, currentVOFeatures);
 #else
-  circularMatching(imageLeft_t0, imageRight_t0, imageLeft_t1, imageRight_t1, pointsLeft_t0, pointsRight_t0, pointsLeft_t1, pointsRight_t1, pointsLeftReturn_t0,
-                   currentVOFeatures);
+  circularMatching(imageLeft_t0, imageRight_t0,   //
+                   imageLeft_t1, imageRight_t1,   //
+                   pointsLeft_t0, pointsRight_t0, //
+                   pointsLeft_t1, pointsRight_t1, //
+                   pointsLeftReturn_t0, currentVOFeatures);
 #endif
   std::vector<bool> status;
   checkValidMatch(pointsLeft_t0, pointsLeftReturn_t0, status, 0);

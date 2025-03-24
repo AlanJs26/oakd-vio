@@ -8,6 +8,7 @@
 #include <depthai/depthai.hpp>
 
 // include opencv library (Optional, used only for the following example)
+#include <memory>
 #include <unistd.h>
 
 #include <opencv2/opencv.hpp>
@@ -15,6 +16,7 @@
 #include "violib/src/visualOdometry.h"
 
 struct OAKStereoQueue {
+  std::shared_ptr<dai::Device> device;
   std::shared_ptr<dai::Pipeline> pipeline;
   std::shared_ptr<dai::DataOutputQueue> left;
   std::shared_ptr<dai::DataOutputQueue> right;
@@ -24,16 +26,18 @@ struct OAKStereoQueue {
     auto leftFrame = this->left->get<dai::ImgFrame>();
     auto rightFrame = this->right->get<dai::ImgFrame>();
 
-    // Convert frames into cv Matrix
-    leftMat = cv::Mat(leftFrame->getHeight(), leftFrame->getWidth(), CV_8UC3, leftFrame->getData().data());
-    rightMat = cv::Mat(rightFrame->getHeight(), rightFrame->getWidth(), CV_8UC3, rightFrame->getData().data());
+    leftMat = leftFrame->getCvFrame();
+    rightMat = rightFrame->getCvFrame();
+    // cvtColor(leftFrame->getCvFrame(), leftMat, cv::COLOR_BGR2GRAY);
+    // cvtColor(rightFrame->getCvFrame(), rightMat, cv::COLOR_BGR2GRAY);
   }
 };
 
 OAKStereoQueue getOAKStereoQueue() {
   OAKStereoQueue stereoQueue;
 
-  stereoQueue.pipeline = std::make_shared<dai::Pipeline>();
+  std::shared_ptr<dai::Pipeline> pipeline(new dai::Pipeline());
+  stereoQueue.pipeline = pipeline;
 
   // Define sources and outputs
   auto monoLeft = stereoQueue.pipeline->create<dai::node::MonoCamera>();
@@ -55,10 +59,11 @@ OAKStereoQueue getOAKStereoQueue() {
   monoLeft->out.link(xoutLeft->input);
 
   // Connect to device and start pipeline
-  dai::Device device(*stereoQueue.pipeline);
+  std::shared_ptr<dai::Device> device(new dai::Device(*stereoQueue.pipeline));
+  stereoQueue.device = device;
 
-  stereoQueue.left = device.getOutputQueue("left");
-  stereoQueue.right = device.getOutputQueue("right");
+  stereoQueue.left = device->getOutputQueue("left");
+  stereoQueue.right = device->getOutputQueue("right");
 
   return stereoQueue;
 }
@@ -97,7 +102,29 @@ int main(int argc, char **argv) {
   // OAK-D cameras queues
   OAKStereoQueue stereoQueue;
 
+  // stereoQueue = getOAKStereoQueue();
+  // while (true) {
+  //   // Instead of get (blocking), we use tryGet (non-blocking) which will return the available data or None otherwise
+  //   auto inLeft = stereoQueue.left->tryGet<dai::ImgFrame>();
+  //   auto inRight = stereoQueue.right->tryGet<dai::ImgFrame>();
+  //
+  //   if (inLeft) {
+  //     cv::imshow("left", inLeft->getCvFrame());
+  //   }
+  //
+  //   if (inRight) {
+  //     cv::imshow("right", inRight->getCvFrame());
+  //   }
+  //
+  //   int key = cv::waitKey(1);
+  //   if (key == 'q' || key == 'Q') {
+  //     return 0;
+  //   }
+  // }
+  // return 0;
+
   if (argc == 3) {
+    cout << "Using KITTI dataset" << endl;
     use_oakd = false;
 
     filepath = string(argv[1]);
@@ -105,7 +132,9 @@ int main(int argc, char **argv) {
     cout << "Filepath: " << filepath << endl;
     cout << "Calibration Filepath: " << strSettingPath << endl;
   } else {
+    cout << "Using OAK-D camera" << endl;
     use_oakd = true;
+
     stereoQueue = getOAKStereoQueue();
 
     strSettingPath = string(argv[1]);
@@ -137,7 +166,7 @@ int main(int argc, char **argv) {
   cv::Mat frame_pose = cv::Mat::eye(4, 4, CV_64F);
   cv::Mat frame_pose32 = cv::Mat::eye(4, 4, CV_32F);
 
-  std::cout << "frame_pose " << frame_pose << std::endl;
+  std::cout << "frame_pose:" << endl << frame_pose << std::endl;
   cv::Mat trajectory = cv::Mat::zeros(600, 1200, CV_8UC3);
   FeatureSet currentVOFeatures;
   cv::Mat points4D, points3D;
@@ -156,6 +185,7 @@ int main(int argc, char **argv) {
     cv::Mat imageRight_t0_color;
     loadImageRight(imageRight_t0_color, imageRight_t0, init_frame_id, filepath);
   }
+  cout << "Rows: " << imageLeft_t0.rows << " Columns: " << imageLeft_t0.cols << endl;
   clock_t t_a, t_b;
 
   // -----------------------------------------
@@ -204,41 +234,51 @@ int main(int argc, char **argv) {
     // Triangulate 3D Points
     // ---------------------
     cv::Mat points3D_t0, points4D_t0;
-    cv::triangulatePoints(projMatrl, projMatrr, pointsLeft_t0, pointsRight_t0, points4D_t0);
-    cv::convertPointsFromHomogeneous(points4D_t0.t(), points3D_t0);
 
-    // cv::Mat points3D_t1, points4D_t1;
-    // cv::triangulatePoints( projMatrl,  projMatrr,  pointsLeft_t1,  pointsRight_t1,  points4D_t1);
-    // cv::convertPointsFromHomogeneous(points4D_t1.t(), points3D_t1);
-
-    // ---------------------
-    // Tracking transfomation
-    // ---------------------
-    clock_t tic_gpu = clock();
-    trackingFrame2Frame(projMatrl, projMatrr, pointsLeft_t0, pointsLeft_t1, points3D_t0, rotation, translation, false);
-    clock_t toc_gpu = clock();
-    std::cerr << "tracking frame 2 frame: " << float(toc_gpu - tic_gpu) / CLOCKS_PER_SEC * 1000 << "ms" << std::endl;
-    displayTracking(imageLeft_t1, pointsLeft_t0, pointsLeft_t1);
-
-    // points4D = points4D_t0;
-    // frame_pose.convertTo(frame_pose32, CV_32F);
-    // points4D = frame_pose32 * points4D;
-    // cv::convertPointsFromHomogeneous(points4D.t(), points3D);
-
-    // ------------------------------------------------
-    // Integrating and display
-    // ------------------------------------------------
-
-    cv::Vec3f rotation_euler = rotationMatrixToEulerAngles(rotation);
-
-    cv::Mat rigid_body_transformation;
-
-    if (abs(rotation_euler[1]) < 0.1 && abs(rotation_euler[0]) < 0.1 && abs(rotation_euler[2]) < 0.1) {
-      integrateOdometryStereo(frame_id, rigid_body_transformation, frame_pose, rotation, translation);
-
+    cout << "pointsLeft_t0 -- size: " << pointsLeft_t0.size() << endl;
+    if (pointsLeft_t0.size() < 4) {
+      cout << "Insufficient features found! Skiping iteration" << endl;
     } else {
+      cv::triangulatePoints(projMatrl, projMatrr,          //
+                            pointsLeft_t0, pointsRight_t0, //
+                            points4D_t0);
+      cv::convertPointsFromHomogeneous(points4D_t0.t(), points3D_t0);
 
-      std::cout << "Too large rotation" << std::endl;
+      cv::Mat points3D_t1, points4D_t1;
+      cv::triangulatePoints(projMatrl, projMatrr, pointsLeft_t1, pointsRight_t1, points4D_t1);
+      cv::convertPointsFromHomogeneous(points4D_t1.t(), points3D_t1);
+
+      // ---------------------
+      // Tracking transfomation
+      // ---------------------
+      clock_t tic_gpu = clock();
+      trackingFrame2Frame(projMatrl, projMatrr,         //
+                          pointsLeft_t0, pointsLeft_t1, //
+                          points3D_t0,                  //
+                          rotation, translation, false);
+      clock_t toc_gpu = clock();
+      std::cerr << "tracking frame 2 frame: " << float(toc_gpu - tic_gpu) / CLOCKS_PER_SEC * 1000 << "ms" << std::endl;
+
+      points4D = points4D_t0;
+      frame_pose.convertTo(frame_pose32, CV_32F);
+      points4D = frame_pose32 * points4D;
+      cv::convertPointsFromHomogeneous(points4D.t(), points3D);
+
+      // ------------------------------------------------
+      // Integrating and display
+      // ------------------------------------------------
+
+      cv::Vec3f rotation_euler = rotationMatrixToEulerAngles(rotation);
+
+      cv::Mat rigid_body_transformation;
+
+      if (abs(rotation_euler[1]) < 0.1 && abs(rotation_euler[0]) < 0.1 && abs(rotation_euler[2]) < 0.1) {
+        integrateOdometryStereo(frame_id, rigid_body_transformation, frame_pose, rotation, translation);
+
+      } else {
+
+        std::cout << "Too large rotation" << std::endl;
+      }
     }
     t_b = clock();
     float frame_time = 1000 * (double)(t_b - t_a) / CLOCKS_PER_SEC;
@@ -251,6 +291,7 @@ int main(int argc, char **argv) {
     // std::cout << "translation: " << translation.t() << std::endl;
     // std::cout << "frame_pose" << frame_pose << std::endl;
 
+    displayTracking(imageLeft_t1, pointsLeft_t0, pointsLeft_t1);
     cv::Mat xyz = frame_pose.col(3).clone();
     display(frame_id, trajectory, xyz, fps);
   }
