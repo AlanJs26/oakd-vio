@@ -4,10 +4,13 @@
 #include <depthai/pipeline/node/XLinkOut.hpp>
 #include <iostream>
 
+#include <algorithm>
+
 // include depthai library
 #include <depthai/depthai.hpp>
 
 // include opencv library (Optional, used only for the following example)
+#include <opencv2/core/types.hpp>
 #include <opencv2/opencv.hpp>
 #include <unistd.h>
 
@@ -21,6 +24,24 @@ static void drawFeatures(cv::Mat &frame, std::vector<dai::TrackedFeature> &featu
   for (auto &feature : features) {
     cv::circle(frame, cv::Point(feature.position.x, feature.position.y), circleRadius, pointColor, -1, cv::LINE_AA, 0);
   }
+}
+
+void features2points(std::vector<dai::TrackedFeature> &features, std::vector<cv::Point2f> &points) {
+  points.clear();
+  for (auto feature : features) {
+    points.push_back(cv::Point2f(feature.position.x, feature.position.y));
+  }
+}
+
+void normalizeFeatures(LR<std::vector<dai::TrackedFeature>> &features_t0, LR<std::vector<dai::TrackedFeature>> &features_t1) {
+  std::sort(features_t0.left.begin(), features_t0.left.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
+  std::sort(features_t0.right.begin(), features_t0.right.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
+  std::sort(features_t1.left.begin(), features_t1.left.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
+  std::sort(features_t1.right.begin(), features_t1.right.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
+
+  std::vector<unsigned long> point_sizes = {features_t0.left.size(), features_t0.right.size(), features_t1.left.size(), features_t1.right.size()};
+
+  auto min_size = *std::min_element(std::begin(point_sizes), std::end(point_sizes));
 }
 
 int main(int argc, char **argv) {
@@ -48,24 +69,24 @@ int main(int argc, char **argv) {
   // OAK-D cameras queues
   OAKStereoQueue stereoQueue;
 
-  stereoQueue = OAKStereoQueue::getOAKStereoQueue();
-  while (true) {
-    cv::Mat leftFrameColor, rightFrameColor;
-
-    auto [leftFrame, rightFrame] = stereoQueue.getLRFrames();
-    auto features = stereoQueue.getTrackedFeatures();
-
-    cv::cvtColor(leftFrame, leftFrameColor, cv::COLOR_GRAY2BGR);
-
-    drawFeatures(leftFrameColor, features.left);
-    cv::imshow("left", leftFrameColor);
-
-    int key = cv::waitKey(1);
-    if (key == 'q' || key == 'Q') {
-      return 0;
-    }
-  }
-  return 0;
+  // stereoQueue = OAKStereoQueue::getOAKStereoQueue();
+  // while (true) {
+  //   cv::Mat leftFrameColor, rightFrameColor;
+  //
+  //   auto [leftFrame, rightFrame] = stereoQueue.getLRFrames();
+  //   auto features = stereoQueue.getTrackedFeatures();
+  //
+  //   cv::cvtColor(leftFrame, leftFrameColor, cv::COLOR_GRAY2BGR);
+  //
+  //   drawFeatures(leftFrameColor, features.left);
+  //   cv::imshow("left", leftFrameColor);
+  //
+  //   int key = cv::waitKey(1);
+  //   if (key == 'q' || key == 'Q') {
+  //     return 0;
+  //   }
+  // }
+  // return 0;
 
   if (argc == 3) {
     cout << "Using KITTI dataset" << endl;
@@ -121,7 +142,7 @@ int main(int argc, char **argv) {
   // ------------------------
   cv::Mat imageRight_t0, imageLeft_t0;
   if (use_oakd) {
-    auto [imageLeft_t0, imageRight_t0] = stereoQueue.getLRFrames();
+    stereoQueue.getLRFrames(imageLeft_t0, imageRight_t0);
   } else {
     cv::Mat imageLeft_t0_color;
     loadImageLeft(imageLeft_t0_color, imageLeft_t0, init_frame_id, filepath);
@@ -132,21 +153,30 @@ int main(int argc, char **argv) {
   cout << "Rows: " << imageLeft_t0.rows << " Columns: " << imageLeft_t0.cols << endl;
   clock_t t_a, t_b;
 
+  LR<std::vector<dai::TrackedFeature>> features_t0, features_t1;
+  features_t1 = stereoQueue.getTrackedFeatures();
+
   // -----------------------------------------
   // Run visual odometry
   // -----------------------------------------
-  std::vector<FeaturePoint> oldFeaturePointsLeft;
-  std::vector<FeaturePoint> currentFeaturePointsLeft;
 
   for (int frame_id = init_frame_id + 1; use_oakd ? true : frame_id < 9000; frame_id++) {
 
     std::cout << std::endl << "frame id " << frame_id << std::endl;
+
+    std::vector<cv::Point2f> pointsLeft_t0, pointsRight_t0, pointsLeft_t1, pointsRight_t1;
+
+    features_t0 = features_t1;
+
+    features2points(features_t0.left, pointsLeft_t0);
+    features2points(features_t0.right, pointsRight_t0);
+
     // ------------
     // Load images
     // ------------
     cv::Mat imageRight_t1, imageLeft_t1;
     if (use_oakd) {
-      auto [imageLeft_t1, imageRight_t1] = stereoQueue.getLRFrames();
+      stereoQueue.getLRFrames(imageLeft_t1, imageRight_t1);
     } else {
       cv::Mat imageLeft_t1_color;
       loadImageLeft(imageLeft_t1_color, imageLeft_t1, frame_id, filepath);
@@ -155,34 +185,40 @@ int main(int argc, char **argv) {
     }
 
     t_a = clock();
-    std::vector<cv::Point2f> oldPointsLeft_t0 = currentVOFeatures.points;
 
-    std::vector<cv::Point2f> pointsLeft_t0, pointsRight_t0, pointsLeft_t1, pointsRight_t1;
-    matchingFeatures(imageLeft_t0, imageRight_t0,   // image at previous iteration
-                     imageLeft_t1, imageRight_t1,   // image at current iteration
-                     currentVOFeatures,             // Features
-                     pointsLeft_t0, pointsRight_t0, // points at previous iteration
-                     pointsLeft_t1, pointsRight_t1  // points at current iteration
-    );
+    features_t1 = stereoQueue.getTrackedFeatures();
 
-    imageLeft_t0 = imageLeft_t1;
-    imageRight_t0 = imageRight_t1;
+    features2points(features_t1.left, pointsLeft_t1);
+    features2points(features_t1.right, pointsRight_t1);
 
-    std::vector<cv::Point2f> &currentPointsLeft_t0 = pointsLeft_t0;
-    std::vector<cv::Point2f> &currentPointsLeft_t1 = pointsLeft_t1;
+    std::vector<unsigned long> point_sizes = {pointsLeft_t0.size(), pointsLeft_t1.size(), pointsRight_t0.size(), pointsRight_t1.size()};
 
-    std::vector<cv::Point2f> newPoints;
-    std::vector<bool> valid; // valid new points are marked with true
+    auto min_size = *std::min_element(std::begin(point_sizes), std::end(point_sizes));
+
+    pointsLeft_t0 = std::vector<cv::Point2f>(pointsLeft_t0.begin(), pointsLeft_t0.begin() + min_size);
+    pointsLeft_t1 = std::vector<cv::Point2f>(pointsLeft_t1.begin(), pointsLeft_t1.begin() + min_size);
+    pointsRight_t0 = std::vector<cv::Point2f>(pointsRight_t0.begin(), pointsRight_t0.begin() + min_size);
+    pointsRight_t1 = std::vector<cv::Point2f>(pointsRight_t1.begin(), pointsRight_t1.begin() + min_size);
+
+    // matchingFeatures(imageLeft_t0, imageRight_t0,   // image at previous iteration
+    //                  imageLeft_t1, imageRight_t1,   // image at current iteration
+    //                  currentVOFeatures,             // Features
+    //                  pointsLeft_t0, pointsRight_t0, // points at previous iteration
+    //                  pointsLeft_t1, pointsRight_t1  // points at current iteration
+    // );
+
+    // imageLeft_t0 = imageLeft_t1;
+    // imageRight_t0 = imageRight_t1;
 
     // ---------------------
     // Triangulate 3D Points
     // ---------------------
-    cv::Mat points3D_t0, points4D_t0;
 
     cout << "pointsLeft_t0 -- size: " << pointsLeft_t0.size() << endl;
     if (pointsLeft_t0.size() < 4) {
       cout << "Insufficient features found! Skiping iteration" << endl;
     } else {
+      cv::Mat points3D_t0, points4D_t0;
       cv::triangulatePoints(projMatrl, projMatrr,          //
                             pointsLeft_t0, pointsRight_t0, //
                             points4D_t0);

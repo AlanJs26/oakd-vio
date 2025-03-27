@@ -18,6 +18,7 @@ Camera.fps: 10.0
 
 # stereo baseline times fx
 Camera.bf: -28.12415128946304
+# 0425
 
 
 # Close/Far threshold. Baseline times.

@@ -1,19 +1,29 @@
 #include "oak_utils.hpp"
+#include <depthai-shared/datatype/RawTrackedFeatures.hpp>
 
-LR<cv::Mat> OAKStereoQueue::getLRFrames() {
+// LR<cv::Mat> OAKStereoQueue::getLRFrames() {
+//   cv::Mat leftFrame, rightFrame;
+//   this->getLRFrames(leftFrame, rightFrame);
+//
+//   return {leftFrame, rightFrame};
+// }
+void OAKStereoQueue::getLRFrames(cv::Mat &left, cv::Mat &right) {
   // Receive frames from device
   auto leftFrame = this->left->get<dai::ImgFrame>();
   auto rightFrame = this->right->get<dai::ImgFrame>();
 
-  return {//
-          .left = leftFrame->getCvFrame(),
-          .right = rightFrame->getCvFrame()};
+  left = leftFrame->getCvFrame();
+  right = rightFrame->getCvFrame();
 }
 
 LR<std::vector<dai::TrackedFeature>> OAKStereoQueue::getTrackedFeatures() {
-  return {//
-          .left = this->leftFeatures->get<dai::TrackedFeatures>()->trackedFeatures,
-          .right = this->rightFeatures->get<dai::TrackedFeatures>()->trackedFeatures};
+  auto left = this->leftFeatures->get<dai::TrackedFeatures>()->trackedFeatures;
+  auto right = this->rightFeatures->get<dai::TrackedFeatures>()->trackedFeatures;
+
+  std::sort(left.begin(), left.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
+  std::sort(right.begin(), right.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
+
+  return {left, right};
 }
 
 OAKStereoQueue OAKStereoQueue::getOAKStereoQueue() {

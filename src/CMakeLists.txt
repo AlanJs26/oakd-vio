@@ -29,13 +29,11 @@ target_link_libraries(${TARGET_NAME}
 ## EXAMPLES =======
 
 # Add source files
-add_executable(feature_detector
-    examples/feature_detector.cpp
-)
-
+add_executable(feature_detector examples/feature_detector.cpp)
 # Link with libraries
-target_link_libraries(feature_detector
-    PUBLIC
-        depthai::opencv
-        ${OpenCV_LIBS} # optional, used for example
-)
+target_link_libraries(feature_detector PUBLIC depthai::opencv ${OpenCV_LIBS})
+
+# Add source files
+add_executable(calibration_reader examples/calibration_reader.cpp)
+# Link with libraries
+target_link_libraries(calibration_reader PUBLIC depthai::opencv ${OpenCV_LIBS})
