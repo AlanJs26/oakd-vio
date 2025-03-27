@@ -6,6 +6,9 @@ project(${TARGET_NAME})
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+set(CMAKE_COLOR_DIAGNOSTICS ON)
+
+include_directories(include)
 
 add_subdirectory(src)
 
@@ -15,7 +18,7 @@ if(NOT MSVC)
 endif()
 
 # Set compiler features (c++14)
-set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD 14)
+set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD 17)
 
 # Windows - Add runtime dependencies
 if(WIN32)

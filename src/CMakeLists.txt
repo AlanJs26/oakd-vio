@@ -4,6 +4,13 @@ add_subdirectory(violib/src)
 find_package(OpenCV REQUIRED)
 find_package(depthai REQUIRED)
 
+
+add_library(oak_utils SHARED "oak_utils.cpp")
+target_link_libraries(oak_utils
+  depthai::opencv 
+  ${OpenCV_LIBS}
+)
+
 # Add source files
 add_executable("${TARGET_NAME}"
     main.cpp
@@ -15,4 +22,20 @@ target_link_libraries(${TARGET_NAME}
         depthai::opencv
         ${OpenCV_LIBS} # optional, used for example
         violib
+        oak_utils
+)
+
+
+## EXAMPLES =======
+
+# Add source files
+add_executable(feature_detector
+    examples/feature_detector.cpp
+)
+
+# Link with libraries
+target_link_libraries(feature_detector
+    PUBLIC
+        depthai::opencv
+        ${OpenCV_LIBS} # optional, used for example
 )

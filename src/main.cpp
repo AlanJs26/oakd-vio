@@ -8,77 +8,23 @@
 #include <depthai/depthai.hpp>
 
 // include opencv library (Optional, used only for the following example)
-#include <memory>
-#include <unistd.h>
-
 #include <opencv2/opencv.hpp>
+#include <unistd.h>
 
 #include "violib/src/visualOdometry.h"
 
-struct OAKStereoQueue {
-  std::shared_ptr<dai::Device> device;
-  std::shared_ptr<dai::Pipeline> pipeline;
-  std::shared_ptr<dai::DataOutputQueue> left;
-  std::shared_ptr<dai::DataOutputQueue> right;
+#include "oak_utils.hpp"
 
-  void getLRFrames(cv::Mat &leftMat, cv::Mat &rightMat) {
-    // Receive frames from device
-    auto leftFrame = this->left->get<dai::ImgFrame>();
-    auto rightFrame = this->right->get<dai::ImgFrame>();
-
-    leftMat = leftFrame->getCvFrame();
-    rightMat = rightFrame->getCvFrame();
-    // cvtColor(leftFrame->getCvFrame(), leftMat, cv::COLOR_BGR2GRAY);
-    // cvtColor(rightFrame->getCvFrame(), rightMat, cv::COLOR_BGR2GRAY);
+static void drawFeatures(cv::Mat &frame, std::vector<dai::TrackedFeature> &features) {
+  static const auto pointColor = cv::Scalar(0, 0, 255);
+  static const int circleRadius = 2;
+  for (auto &feature : features) {
+    cv::circle(frame, cv::Point(feature.position.x, feature.position.y), circleRadius, pointColor, -1, cv::LINE_AA, 0);
   }
-};
-
-OAKStereoQueue getOAKStereoQueue() {
-  OAKStereoQueue stereoQueue;
-
-  std::shared_ptr<dai::Pipeline> pipeline(new dai::Pipeline());
-  stereoQueue.pipeline = pipeline;
-
-  // Define sources and outputs
-  auto monoLeft = stereoQueue.pipeline->create<dai::node::MonoCamera>();
-  auto monoRight = stereoQueue.pipeline->create<dai::node::MonoCamera>();
-  auto xoutLeft = stereoQueue.pipeline->create<dai::node::XLinkOut>();
-  auto xoutRight = stereoQueue.pipeline->create<dai::node::XLinkOut>();
-
-  xoutLeft->setStreamName("left");
-  xoutRight->setStreamName("right");
-
-  // Properties
-  monoLeft->setCamera("left");
-  monoLeft->setResolution(dai::MonoCameraProperties::SensorResolution::THE_400_P);
-  monoRight->setCamera("right");
-  monoRight->setResolution(dai::MonoCameraProperties::SensorResolution::THE_400_P);
-
-  // Linking
-  monoRight->out.link(xoutRight->input);
-  monoLeft->out.link(xoutLeft->input);
-
-  // Connect to device and start pipeline
-  std::shared_ptr<dai::Device> device(new dai::Device(*stereoQueue.pipeline));
-  stereoQueue.device = device;
-
-  stereoQueue.left = device->getOutputQueue("left");
-  stereoQueue.right = device->getOutputQueue("right");
-
-  return stereoQueue;
 }
 
 int main(int argc, char **argv) {
   using namespace std;
-
-  // // Receive 'preview' frame from device
-  // auto leftFrame = inLeft->get<dai::ImgFrame>();
-  // auto rightFrame = inRight->get<dai::ImgFrame>();
-  // auto leftMat = cv::Mat(leftFrame->getHeight(), leftFrame->getWidth(),
-  // CV_8UC3,
-  //                        leftFrame->getData().data());
-  // auto rightMat = cv::Mat(rightFrame->getHeight(), rightFrame->getWidth(),
-  //                         CV_8UC3, rightFrame->getData().data());
 
 #if USE_CUDA
   printf("CUDA Enabled\n");
@@ -102,26 +48,24 @@ int main(int argc, char **argv) {
   // OAK-D cameras queues
   OAKStereoQueue stereoQueue;
 
-  // stereoQueue = getOAKStereoQueue();
-  // while (true) {
-  //   // Instead of get (blocking), we use tryGet (non-blocking) which will return the available data or None otherwise
-  //   auto inLeft = stereoQueue.left->tryGet<dai::ImgFrame>();
-  //   auto inRight = stereoQueue.right->tryGet<dai::ImgFrame>();
-  //
-  //   if (inLeft) {
-  //     cv::imshow("left", inLeft->getCvFrame());
-  //   }
-  //
-  //   if (inRight) {
-  //     cv::imshow("right", inRight->getCvFrame());
-  //   }
-  //
-  //   int key = cv::waitKey(1);
-  //   if (key == 'q' || key == 'Q') {
-  //     return 0;
-  //   }
-  // }
-  // return 0;
+  stereoQueue = OAKStereoQueue::getOAKStereoQueue();
+  while (true) {
+    cv::Mat leftFrameColor, rightFrameColor;
+
+    auto [leftFrame, rightFrame] = stereoQueue.getLRFrames();
+    auto features = stereoQueue.getTrackedFeatures();
+
+    cv::cvtColor(leftFrame, leftFrameColor, cv::COLOR_GRAY2BGR);
+
+    drawFeatures(leftFrameColor, features.left);
+    cv::imshow("left", leftFrameColor);
+
+    int key = cv::waitKey(1);
+    if (key == 'q' || key == 'Q') {
+      return 0;
+    }
+  }
+  return 0;
 
   if (argc == 3) {
     cout << "Using KITTI dataset" << endl;
@@ -135,7 +79,7 @@ int main(int argc, char **argv) {
     cout << "Using OAK-D camera" << endl;
     use_oakd = true;
 
-    stereoQueue = getOAKStereoQueue();
+    stereoQueue = OAKStereoQueue::getOAKStereoQueue();
 
     strSettingPath = string(argv[1]);
     cout << "Calibration Filepath: " << strSettingPath << endl;
@@ -177,7 +121,7 @@ int main(int argc, char **argv) {
   // ------------------------
   cv::Mat imageRight_t0, imageLeft_t0;
   if (use_oakd) {
-    stereoQueue.getLRFrames(imageLeft_t0, imageRight_t0);
+    auto [imageLeft_t0, imageRight_t0] = stereoQueue.getLRFrames();
   } else {
     cv::Mat imageLeft_t0_color;
     loadImageLeft(imageLeft_t0_color, imageLeft_t0, init_frame_id, filepath);
@@ -202,7 +146,7 @@ int main(int argc, char **argv) {
     // ------------
     cv::Mat imageRight_t1, imageLeft_t1;
     if (use_oakd) {
-      stereoQueue.getLRFrames(imageLeft_t1, imageRight_t1);
+      auto [imageLeft_t1, imageRight_t1] = stereoQueue.getLRFrames();
     } else {
       cv::Mat imageLeft_t1_color;
       loadImageLeft(imageLeft_t1_color, imageLeft_t1, frame_id, filepath);
