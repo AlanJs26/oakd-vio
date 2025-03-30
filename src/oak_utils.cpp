@@ -1,12 +1,14 @@
 #include "oak_utils.hpp"
+#include <algorithm>
+
 #include <depthai-shared/datatype/RawTrackedFeatures.hpp>
 
-// LR<cv::Mat> OAKStereoQueue::getLRFrames() {
-//   cv::Mat leftFrame, rightFrame;
-//   this->getLRFrames(leftFrame, rightFrame);
-//
-//   return {leftFrame, rightFrame};
-// }
+LR<cv::Mat> OAKStereoQueue::getLRFrames() {
+  cv::Mat leftFrame, rightFrame;
+  this->getLRFrames(leftFrame, rightFrame);
+
+  return {leftFrame, rightFrame};
+}
 void OAKStereoQueue::getLRFrames(cv::Mat &left, cv::Mat &right) {
   // Receive frames from device
   auto leftFrame = this->left->get<dai::ImgFrame>();

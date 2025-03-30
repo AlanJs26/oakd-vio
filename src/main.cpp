@@ -1,3 +1,4 @@
+#include <depthai-shared/datatype/RawTrackedFeatures.hpp>
 #include <depthai/device/DataQueue.hpp>
 #include <depthai/pipeline/Pipeline.hpp>
 #include <depthai/pipeline/node/MonoCamera.hpp>
@@ -5,6 +6,7 @@
 #include <iostream>
 
 #include <algorithm>
+#include <iterator>
 
 // include depthai library
 #include <depthai/depthai.hpp>
@@ -34,14 +36,58 @@ void features2points(std::vector<dai::TrackedFeature> &features, std::vector<cv:
 }
 
 void normalizeFeatures(LR<std::vector<dai::TrackedFeature>> &features_t0, LR<std::vector<dai::TrackedFeature>> &features_t1) {
-  std::sort(features_t0.left.begin(), features_t0.left.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
-  std::sort(features_t0.right.begin(), features_t0.right.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
-  std::sort(features_t1.left.begin(), features_t1.left.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
-  std::sort(features_t1.right.begin(), features_t1.right.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
+  struct iterStruct {
+    std::vector<dai::TrackedFeature> feature;
+    int i;
 
-  std::vector<unsigned long> point_sizes = {features_t0.left.size(), features_t0.right.size(), features_t1.left.size(), features_t1.right.size()};
+    std::vector<dai::TrackedFeature>::iterator current() { return this->feature.begin() + this->i; }
+  };
 
-  auto min_size = *std::min_element(std::begin(point_sizes), std::end(point_sizes));
+  std::array<iterStruct, 4> iterators = {
+      iterStruct{features_t0.left, 0},
+      iterStruct{features_t0.right, 0},
+      iterStruct{features_t1.left, 0},
+      iterStruct{features_t1.right, 0},
+  };
+
+  // Ordena em features em ordem crescente
+  for (iterStruct &it : iterators) {
+    std::sort(it.feature.begin(), it.feature.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
+  }
+
+  while (true) {
+    // Verifica se existe um iterator que acabou
+    auto ended_iter = std::find_if(iterators.begin(), iterators.end(), [](iterStruct a) { return a.current() == a.feature.end(); });
+    if (ended_iter != iterators.end()) {
+      // retrocede um item e termina o while
+      for (iterStruct &it : iterators) {
+        it.i--;
+      }
+      break;
+    }
+
+    // verifica se o feature.id dos iterators são todos iguais
+    auto equal_id_iter = std::adjacent_find(iterators.begin(), iterators.end(), [](iterStruct a, iterStruct b) { return a.current()->id != b.current()->id; });
+    if (equal_id_iter == iterators.end()) {
+      for (auto &it : iterators) {
+        it.i++;
+      }
+      continue;
+    }
+
+    iterStruct *max_id_iter =
+        std::max_element(std::begin(iterators), std::end(iterators), [](iterStruct a, iterStruct b) { return a.current()->id < b.current()->id; });
+
+    for (iterStruct &it : iterators) {
+      if (&it != max_id_iter) {
+        it.feature.erase(it.current());
+      }
+    }
+  }
+
+  for (iterStruct &it : iterators) {
+    it.feature = std::vector<dai::TrackedFeature>(it.feature.begin(), it.current());
+  }
 }
 
 int main(int argc, char **argv) {
@@ -51,7 +97,7 @@ int main(int argc, char **argv) {
   printf("CUDA Enabled\n");
 #endif
   // -----------------------------------------
-  // Load images and calibration parameters
+  // Load dataset images and calibration parameters
   // -----------------------------------------
   bool use_oakd = false;
   if (argc < 2 || argc > 3) {
@@ -153,6 +199,10 @@ int main(int argc, char **argv) {
   cout << "Rows: " << imageLeft_t0.rows << " Columns: " << imageLeft_t0.cols << endl;
   clock_t t_a, t_b;
 
+  // ----------------
+  // Extract first features
+  // ----------------
+
   LR<std::vector<dai::TrackedFeature>> features_t0, features_t1;
   features_t1 = stereoQueue.getTrackedFeatures();
 
@@ -164,12 +214,7 @@ int main(int argc, char **argv) {
 
     std::cout << std::endl << "frame id " << frame_id << std::endl;
 
-    std::vector<cv::Point2f> pointsLeft_t0, pointsRight_t0, pointsLeft_t1, pointsRight_t1;
-
     features_t0 = features_t1;
-
-    features2points(features_t0.left, pointsLeft_t0);
-    features2points(features_t0.right, pointsRight_t0);
 
     // ------------
     // Load images
@@ -186,19 +231,25 @@ int main(int argc, char **argv) {
 
     t_a = clock();
 
+    // ----------------
+    // Extract Features
+    // ----------------
+
     features_t1 = stereoQueue.getTrackedFeatures();
 
+    normalizeFeatures(features_t0, features_t1);
+
+    auto feature_vectors = {features_t0.left, features_t0.right, features_t1.left, features_t1.right};
+    auto equal_sizes_iter = std::adjacent_find(feature_vectors.begin(), feature_vectors.end(),
+                                               [](std::vector<dai::TrackedFeature> a, std::vector<dai::TrackedFeature> b) { return a.size() == a.size(); });
+    assert(equal_sizes_iter != feature_vectors.end());
+
+    std::vector<cv::Point2f> pointsLeft_t0, pointsRight_t0, pointsLeft_t1, pointsRight_t1;
+
+    features2points(features_t0.left, pointsLeft_t0);
+    features2points(features_t0.right, pointsRight_t0);
     features2points(features_t1.left, pointsLeft_t1);
     features2points(features_t1.right, pointsRight_t1);
-
-    std::vector<unsigned long> point_sizes = {pointsLeft_t0.size(), pointsLeft_t1.size(), pointsRight_t0.size(), pointsRight_t1.size()};
-
-    auto min_size = *std::min_element(std::begin(point_sizes), std::end(point_sizes));
-
-    pointsLeft_t0 = std::vector<cv::Point2f>(pointsLeft_t0.begin(), pointsLeft_t0.begin() + min_size);
-    pointsLeft_t1 = std::vector<cv::Point2f>(pointsLeft_t1.begin(), pointsLeft_t1.begin() + min_size);
-    pointsRight_t0 = std::vector<cv::Point2f>(pointsRight_t0.begin(), pointsRight_t0.begin() + min_size);
-    pointsRight_t1 = std::vector<cv::Point2f>(pointsRight_t1.begin(), pointsRight_t1.begin() + min_size);
 
     // matchingFeatures(imageLeft_t0, imageRight_t0,   // image at previous iteration
     //                  imageLeft_t1, imageRight_t1,   // image at current iteration

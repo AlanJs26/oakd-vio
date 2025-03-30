@@ -32,6 +32,7 @@ services:
       - ./.clang-format:/root/dev/.clang-format
       - ./.gitignore:/root/dev/.gitignore
       - ./src:/root/dev/src
+      - ./include:/root/dev/include
 
       - ../kitti-dataset/:/kitti-dataset
 
