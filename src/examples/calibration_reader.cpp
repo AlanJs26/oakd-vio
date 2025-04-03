@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
   printMatrix(intrinsics);
 
   cout << "Intrinsics from getCameraIntrinsics function AA x AA:" << endl;
-  intrinsics = calibData.getCameraIntrinsics(dai::CameraBoardSocket::CAM_C, 640, 480);
+  intrinsics = calibData.getCameraIntrinsics(dai::CameraBoardSocket::CAM_C, 400);
   printMatrix(intrinsics);
 
   std::vector<std::vector<float>> extrinsics;

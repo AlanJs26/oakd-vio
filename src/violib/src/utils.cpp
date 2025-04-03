@@ -19,7 +19,7 @@ void display(int frame_id, cv::Mat &trajectory, cv::Mat &pose, float fps) {
 }
 
 void display(int frame_id, cv::Mat &trajectory, cv::Mat &pose, std::vector<Matrix> &pose_matrix_gt, float fps, bool show_gt) {
-  int scaling = 2;
+  int scaling = 1;
   // draw estimated trajectory
   int x = int(pose.at<double>(0)) * scaling + 300;
   int y = int(pose.at<double>(2)) * scaling + 100;
@@ -43,8 +43,6 @@ void display(int frame_id, cv::Mat &trajectory, cv::Mat &pose, std::vector<Matri
   // putText(traj, text, textOrg, fontFace, fontScale, Scalar::all(255), thickness, 8);
 
   cv::imshow("Trajectory", trajectory);
-
-  cv::waitKey(1);
 }
 
 // --------------------------------
@@ -73,11 +71,11 @@ void integrateOdometryStereo(int frame_i, cv::Mat &rigid_body_transformation, cv
   rigid_body_transformation = rigid_body_transformation.inv();
   // if ((scale>0.1)&&(translation_stereo.at<double>(2) > translation_stereo.at<double>(0)) && (translation_stereo.at<double>(2) >
   // translation_stereo.at<double>(1)))
-  if (scale > 0.05 && scale < 10) {
+  // if (scale > 0.05 && scale < 10) {
+  if (scale > 0.02 && scale < 10) {
+    // if (scale < 10) {
     // std::cout << "Rpose" << Rpose << std::endl;
-
     frame_pose = frame_pose * rigid_body_transformation;
-
   } else {
     std::cout << "[WARNING] scale below 0.1, or incorrect translation" << std::endl;
   }

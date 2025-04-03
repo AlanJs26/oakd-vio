@@ -20,12 +20,13 @@ void OAKStereoQueue::getLRFrames(cv::Mat &left, cv::Mat &right) {
 
 LR<std::vector<dai::TrackedFeature>> OAKStereoQueue::getTrackedFeatures() {
   auto left = this->leftFeatures->get<dai::TrackedFeatures>()->trackedFeatures;
-  auto right = this->rightFeatures->get<dai::TrackedFeatures>()->trackedFeatures;
+  // auto right = this->rightFeatures->get<dai::TrackedFeatures>()->trackedFeatures;
 
-  std::sort(left.begin(), left.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
-  std::sort(right.begin(), right.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
+  // std::sort(left.begin(), left.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
+  // std::sort(right.begin(), right.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
 
-  return {left, right};
+  // return {left, right};
+  return {left, left};
 }
 
 OAKStereoQueue OAKStereoQueue::getOAKStereoQueue() {
@@ -39,14 +40,14 @@ OAKStereoQueue OAKStereoQueue::getOAKStereoQueue() {
   auto monoRight = pipeline->create<dai::node::MonoCamera>();
 
   auto featureTrackerLeft = pipeline->create<dai::node::FeatureTracker>();
-  auto featureTrackerRight = pipeline->create<dai::node::FeatureTracker>();
+  // auto featureTrackerRight = pipeline->create<dai::node::FeatureTracker>();
 
   // Define Links
   auto xoutLeft = pipeline->create<dai::node::XLinkOut>();
   auto xoutRight = pipeline->create<dai::node::XLinkOut>();
 
   auto xoutTrackedFeaturesLeft = pipeline->create<dai::node::XLinkOut>();
-  auto xoutTrackedFeaturesRight = pipeline->create<dai::node::XLinkOut>();
+  // auto xoutTrackedFeaturesRight = pipeline->create<dai::node::XLinkOut>();
   auto xinTrackedFeaturesConfig = pipeline->create<dai::node::XLinkIn>();
 
   // Name streams
@@ -54,7 +55,7 @@ OAKStereoQueue OAKStereoQueue::getOAKStereoQueue() {
   xoutRight->setStreamName("right");
 
   xoutTrackedFeaturesLeft->setStreamName("trackedFeaturesLeft");
-  xoutTrackedFeaturesRight->setStreamName("trackedFeaturesRight");
+  // xoutTrackedFeaturesRight->setStreamName("trackedFeaturesRight");
   xinTrackedFeaturesConfig->setStreamName("trackedFeaturesConfig");
 
   // Properties
@@ -65,7 +66,7 @@ OAKStereoQueue OAKStereoQueue::getOAKStereoQueue() {
 
   // Disable optical flow
   featureTrackerLeft->initialConfig.setMotionEstimator(false);
-  featureTrackerRight->initialConfig.setMotionEstimator(false);
+  // featureTrackerRight->initialConfig.setMotionEstimator(false);
 
   // Linking
   monoLeft->out.link(featureTrackerLeft->inputImage);
@@ -73,12 +74,11 @@ OAKStereoQueue OAKStereoQueue::getOAKStereoQueue() {
   featureTrackerLeft->outputFeatures.link(xoutTrackedFeaturesLeft->input);
   xinTrackedFeaturesConfig->out.link(featureTrackerLeft->inputConfig);
 
-  monoRight->out.link(featureTrackerRight->inputImage);
-  featureTrackerRight->passthroughInputImage.link(xoutRight->input);
-  featureTrackerRight->outputFeatures.link(xoutTrackedFeaturesRight->input);
-  xinTrackedFeaturesConfig->out.link(featureTrackerRight->inputConfig);
-
-  auto featureTrackerConfig = featureTrackerRight->initialConfig.get();
+  monoRight->out.link(xoutRight->input);
+  // monoRight->out.link(featureTrackerRight->inputImage);
+  // featureTrackerRight->passthroughInputImage.link(xoutRight->input);
+  // featureTrackerRight->outputFeatures.link(xoutTrackedFeaturesRight->input);
+  // xinTrackedFeaturesConfig->out.link(featureTrackerRight->inputConfig);
 
   // Connect to device and start pipeline
   std::shared_ptr<dai::Device> device(new dai::Device(*stereoQueue.pipeline));
@@ -88,9 +88,9 @@ OAKStereoQueue OAKStereoQueue::getOAKStereoQueue() {
   stereoQueue.left = device->getOutputQueue("left", 8, false);
   stereoQueue.leftFeatures = device->getOutputQueue("trackedFeaturesLeft", 8, false);
   stereoQueue.right = device->getOutputQueue("right", 8, false);
-  stereoQueue.rightFeatures = device->getOutputQueue("trackedFeaturesRight", 8, false);
+  // stereoQueue.rightFeatures = device->getOutputQueue("trackedFeaturesRight", 8, false);
 
-  auto inputFeatureTrackerConfigQueue = device->getInputQueue("trackedFeaturesConfig");
+  // auto inputFeatureTrackerConfigQueue = device->getInputQueue("trackedFeaturesConfig");
 
   return stereoQueue;
 }

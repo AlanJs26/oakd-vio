@@ -11,6 +11,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
   git \
   python3-dev \
   python3-numpy \
+  just \
   libopencv-dev
 
 # Create dev user with password 'dev'

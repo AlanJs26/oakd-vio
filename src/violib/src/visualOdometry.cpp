@@ -70,16 +70,8 @@ void matchingFeatures(cv::Mat &imageLeft_t0, cv::Mat &imageRight_t0,            
                       FeatureSet &currentVOFeatures,                                                     //
                       std::vector<cv::Point2f> &pointsLeft_t0, std::vector<cv::Point2f> &pointsRight_t0, //
                       std::vector<cv::Point2f> &pointsLeft_t1, std::vector<cv::Point2f> &pointsRight_t1) {
-  // ----------------------------
-  // Feature detection using FAST
-  // ----------------------------
-  std::vector<cv::Point2f> pointsLeftReturn_t0; // feature points to check cicular mathcing validation
 
-  if (currentVOFeatures.size() < 2000) {
-    // append new features with old features
-    appendNewFeatures(imageLeft_t0, currentVOFeatures);
-    std::cout << "Current feature set size: " << currentVOFeatures.points.size() << std::endl;
-  }
+  std::vector<cv::Point2f> pointsLeftReturn_t0; // feature points to check cicular mathcing validation
 
   // --------------------------------------------------------
   // Feature tracking using KLT tracker, bucketing and circular matching
@@ -173,16 +165,13 @@ void displayTracking(cv::Mat &imageLeft_t1, std::vector<cv::Point2f> &pointsLeft
 
   cv::cvtColor(imageLeft_t1, vis, cv::COLOR_GRAY2BGR, 3);
 
-  for (int i = 0; i < pointsLeft_t0.size(); i++) {
-    cv::circle(vis, cv::Point(pointsLeft_t0[i].x, pointsLeft_t0[i].y), radius, CV_RGB(0, 255, 0));
-  }
+  if (pointsLeft_t0.size() == pointsLeft_t1.size()) {
+    for (int i = 0; i < pointsLeft_t0.size(); i++) {
+      cv::circle(vis, cv::Point(pointsLeft_t0[i].x, pointsLeft_t0[i].y), radius, CV_RGB(0, 255, 0));
+      cv::circle(vis, cv::Point(pointsLeft_t1[i].x, pointsLeft_t1[i].y), radius, CV_RGB(255, 0, 0));
 
-  for (int i = 0; i < pointsLeft_t1.size(); i++) {
-    cv::circle(vis, cv::Point(pointsLeft_t1[i].x, pointsLeft_t1[i].y), radius, CV_RGB(255, 0, 0));
-  }
-
-  for (int i = 0; i < pointsLeft_t1.size(); i++) {
-    cv::line(vis, pointsLeft_t0[i], pointsLeft_t1[i], CV_RGB(0, 255, 0));
+      cv::line(vis, pointsLeft_t0[i], pointsLeft_t1[i], CV_RGB(0, 255, 0));
+    }
   }
 
   cv::imshow("vis ", vis);

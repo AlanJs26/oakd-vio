@@ -3,10 +3,13 @@
 #include <depthai/pipeline/Pipeline.hpp>
 #include <depthai/pipeline/node/MonoCamera.hpp>
 #include <depthai/pipeline/node/XLinkOut.hpp>
-#include <iostream>
 
 #include <algorithm>
+#include <filesystem>
+#include <iostream>
 #include <iterator>
+#include <opencv2/highgui.hpp>
+#include <vector>
 
 // include depthai library
 #include <depthai/depthai.hpp>
@@ -17,6 +20,7 @@
 #include <unistd.h>
 
 #include "violib/src/visualOdometry.h"
+#include "violib/src/evaluate/evaluate_odometry.h"
 
 #include "oak_utils.hpp"
 
@@ -35,60 +39,29 @@ void features2points(std::vector<dai::TrackedFeature> &features, std::vector<cv:
   }
 }
 
-void normalizeFeatures(LR<std::vector<dai::TrackedFeature>> &features_t0, LR<std::vector<dai::TrackedFeature>> &features_t1) {
-  struct iterStruct {
-    std::vector<dai::TrackedFeature> feature;
-    int i;
+void filterCommonFeatures(std::vector<dai::TrackedFeature> &vec1, std::vector<dai::TrackedFeature> &vec2) {
+  // Criar conjuntos de IDs
+  std::unordered_set<int> ids1, ids2;
+  for (const auto &f : vec1)
+    ids1.insert(f.id);
+  for (const auto &f : vec2)
+    ids2.insert(f.id);
 
-    std::vector<dai::TrackedFeature>::iterator current() { return this->feature.begin() + this->i; }
-  };
-
-  std::array<iterStruct, 4> iterators = {
-      iterStruct{features_t0.left, 0},
-      iterStruct{features_t0.right, 0},
-      iterStruct{features_t1.left, 0},
-      iterStruct{features_t1.right, 0},
-  };
-
-  // Ordena em features em ordem crescente
-  for (iterStruct &it : iterators) {
-    std::sort(it.feature.begin(), it.feature.end(), [](dai::TrackedFeature &a, dai::TrackedFeature &b) { return a.id < b.id; });
-  }
-
-  while (true) {
-    // Verifica se existe um iterator que acabou
-    auto ended_iter = std::find_if(iterators.begin(), iterators.end(), [](iterStruct a) { return a.current() == a.feature.end(); });
-    if (ended_iter != iterators.end()) {
-      // retrocede um item e termina o while
-      for (iterStruct &it : iterators) {
-        it.i--;
-      }
-      break;
-    }
-
-    // verifica se o feature.id dos iterators são todos iguais
-    auto equal_id_iter = std::adjacent_find(iterators.begin(), iterators.end(), [](iterStruct a, iterStruct b) { return a.current()->id != b.current()->id; });
-    if (equal_id_iter == iterators.end()) {
-      for (auto &it : iterators) {
-        it.i++;
-      }
-      continue;
-    }
-
-    iterStruct *max_id_iter =
-        std::max_element(std::begin(iterators), std::end(iterators), [](iterStruct a, iterStruct b) { return a.current()->id < b.current()->id; });
-
-    for (iterStruct &it : iterators) {
-      if (&it != max_id_iter) {
-        it.feature.erase(it.current());
-      }
+  // Encontrar interseção dos IDs
+  std::unordered_set<int> common_ids;
+  for (int id : ids1) {
+    if (ids2.find(id) != ids2.end()) {
+      common_ids.insert(id);
     }
   }
 
-  for (iterStruct &it : iterators) {
-    it.feature = std::vector<dai::TrackedFeature>(it.feature.begin(), it.current());
-  }
+  // Remover elementos que não estão na interseção
+  auto remove_unmatched = [&](const dai::TrackedFeature &f) { return common_ids.find(f.id) == common_ids.end(); };
+
+  vec1.erase(std::remove_if(vec1.begin(), vec1.end(), remove_unmatched), vec1.end());
+  vec2.erase(std::remove_if(vec2.begin(), vec2.end(), remove_unmatched), vec2.end());
 }
+
 
 int main(int argc, char **argv) {
   using namespace std;
@@ -100,7 +73,7 @@ int main(int argc, char **argv) {
   // Load dataset images and calibration parameters
   // -----------------------------------------
   bool use_oakd = false;
-  if (argc < 2 || argc > 3) {
+  if (argc < 2 || argc > 4) {
     cerr << "Usage (kitti dataset): ./run [path_to_sequence] "
             "[path_to_calibration]"
          << endl;
@@ -134,7 +107,17 @@ int main(int argc, char **argv) {
   // }
   // return 0;
 
-  if (argc == 3) {
+
+  std::vector<Matrix> pose_matrix_gt;
+  bool display_ground_truth = false;
+  if(argc == 4) {
+    display_ground_truth = true;
+    cerr << "Display ground truth trajectory" << endl;
+    // load ground truth pose
+    string filename_pose = string(argv[3]);
+    pose_matrix_gt = loadPoses(filename_pose);
+  }
+  if (argc >= 3) {
     cout << "Using KITTI dataset" << endl;
     use_oakd = false;
 
@@ -178,7 +161,7 @@ int main(int argc, char **argv) {
   cv::Mat frame_pose32 = cv::Mat::eye(4, 4, CV_32F);
 
   std::cout << "frame_pose:" << endl << frame_pose << std::endl;
-  cv::Mat trajectory = cv::Mat::zeros(600, 1200, CV_8UC3);
+  cv::Mat trajectory = cv::Mat::zeros(1000, 1000, CV_8UC3);
   FeatureSet currentVOFeatures;
   cv::Mat points4D, points3D;
   int init_frame_id = 0;
@@ -203,8 +186,8 @@ int main(int argc, char **argv) {
   // Extract first features
   // ----------------
 
-  LR<std::vector<dai::TrackedFeature>> features_t0, features_t1;
-  features_t1 = stereoQueue.getTrackedFeatures();
+  // LR<std::vector<dai::TrackedFeature>> features_t0, features_t1;
+  std::vector<dai::TrackedFeature> features;
 
   // -----------------------------------------
   // Run visual odometry
@@ -214,13 +197,14 @@ int main(int argc, char **argv) {
 
     std::cout << std::endl << "frame id " << frame_id << std::endl;
 
-    features_t0 = features_t1;
 
     // ------------
     // Load images
     // ------------
     cv::Mat imageRight_t1, imageLeft_t1;
     if (use_oakd) {
+      features = stereoQueue.leftFeatures->get<dai::TrackedFeatures>()->trackedFeatures;
+      // features_t0 = stereoQueue.getTrackedFeatures();
       stereoQueue.getLRFrames(imageLeft_t1, imageRight_t1);
     } else {
       cv::Mat imageLeft_t1_color;
@@ -235,38 +219,66 @@ int main(int argc, char **argv) {
     // Extract Features
     // ----------------
 
-    features_t1 = stereoQueue.getTrackedFeatures();
+    // features_t1 = stereoQueue.getTrackedFeatures();
 
-    normalizeFeatures(features_t0, features_t1);
+    // normalizeFeatures(features_t0, features_t1);
 
-    auto feature_vectors = {features_t0.left, features_t0.right, features_t1.left, features_t1.right};
-    auto equal_sizes_iter = std::adjacent_find(feature_vectors.begin(), feature_vectors.end(),
-                                               [](std::vector<dai::TrackedFeature> a, std::vector<dai::TrackedFeature> b) { return a.size() == a.size(); });
-    assert(equal_sizes_iter != feature_vectors.end());
+    // auto feature_vectors = {features_t0.left, features_t0.right, features_t1.left, features_t1.right};
+    // auto equal_sizes_iter = std::adjacent_find(feature_vectors.begin(), feature_vectors.end(),
+    //                                            [](std::vector<dai::TrackedFeature> a, std::vector<dai::TrackedFeature> b) { return a.size() != a.size(); });
+    //
+    // auto all_equal = equal_sizes_iter == feature_vectors.end();
+    //
+    // if (all_equal) {
+    //   std::cout << "All Equal" << std::endl;
+    // }
 
     std::vector<cv::Point2f> pointsLeft_t0, pointsRight_t0, pointsLeft_t1, pointsRight_t1;
 
-    features2points(features_t0.left, pointsLeft_t0);
-    features2points(features_t0.right, pointsRight_t0);
-    features2points(features_t1.left, pointsLeft_t1);
-    features2points(features_t1.right, pointsRight_t1);
+    // features2points(features_t0.left, pointsLeft_t0);
+    // features2points(features_t0.right, pointsRight_t0);
+    // features2points(features_t1.left, pointsLeft_t1);
+    // features2points(features_t1.right, pointsRight_t1);
 
-    // matchingFeatures(imageLeft_t0, imageRight_t0,   // image at previous iteration
-    //                  imageLeft_t1, imageRight_t1,   // image at current iteration
-    //                  currentVOFeatures,             // Features
-    //                  pointsLeft_t0, pointsRight_t0, // points at previous iteration
-    //                  pointsLeft_t1, pointsRight_t1  // points at current iteration
-    // );
+    // cout << "pointsLeft_t0 -- size: " << pointsLeft_t0.size() << endl;
 
-    // imageLeft_t0 = imageLeft_t1;
-    // imageRight_t0 = imageRight_t1;
+    // ----------------------------
+    // Feature detection using FAST
+    // ----------------------------
+
+    if (currentVOFeatures.size() < 2000) {
+      // append new features with old features
+
+      if (use_oakd) {
+        for (auto &feature : features) {
+          currentVOFeatures.points.push_back(cv::Point2f(feature.position.x, feature.position.y));
+          // currentVOFeatures.ages.push_back(feature.age);
+          currentVOFeatures.ages.push_back(0);
+        }
+      } else {
+        appendNewFeatures(imageLeft_t0, currentVOFeatures);
+      }
+
+      std::cout << "Current feature set size: " << currentVOFeatures.points.size() << std::endl;
+    }
+
+    if (currentVOFeatures.points.size() > 0) {
+      matchingFeatures(imageLeft_t0, imageRight_t0,   // image at previous iteration
+                      imageLeft_t1, imageRight_t1,   // image at current iteration
+                      currentVOFeatures,             // Features
+                      pointsLeft_t0, pointsRight_t0, // points at previous iteration
+                      pointsLeft_t1, pointsRight_t1  // points at current iteration
+      );
+    }
+
+    imageLeft_t0 = imageLeft_t1;
+    imageRight_t0 = imageRight_t1;
 
     // ---------------------
     // Triangulate 3D Points
     // ---------------------
 
-    cout << "pointsLeft_t0 -- size: " << pointsLeft_t0.size() << endl;
-    if (pointsLeft_t0.size() < 4) {
+    if (pointsLeft_t0.size() < 4 || currentVOFeatures.points.size() == 0) {
       cout << "Insufficient features found! Skiping iteration" << endl;
     } else {
       cv::Mat points3D_t0, points4D_t0;
@@ -311,6 +323,7 @@ int main(int argc, char **argv) {
         std::cout << "Too large rotation" << std::endl;
       }
     }
+
     t_b = clock();
     float frame_time = 1000 * (double)(t_b - t_a) / CLOCKS_PER_SEC;
     float fps = 1000 / frame_time;
@@ -322,9 +335,25 @@ int main(int argc, char **argv) {
     // std::cout << "translation: " << translation.t() << std::endl;
     // std::cout << "frame_pose" << frame_pose << std::endl;
 
-    displayTracking(imageLeft_t1, pointsLeft_t0, pointsLeft_t1);
     cv::Mat xyz = frame_pose.col(3).clone();
-    display(frame_id, trajectory, xyz, fps);
+    std::cout << xyz.at<double>(0) << ", " << xyz.at<double>(1) << ", " << xyz.at<double>(2) << std::endl;
+
+    cv::putText(
+        imageLeft_t1,
+        cv::format("%f, %f, %f", xyz.at<double>(0), xyz.at<double>(1), xyz.at<double>(2)),
+        cv::Point2d(20, 100),
+        cv::FONT_HERSHEY_SIMPLEX,
+        1,
+        cv::Scalar(0,255,0),
+        4);
+    displayTracking(imageLeft_t1, pointsLeft_t0, pointsLeft_t1);
+
+    if (display_ground_truth) {
+      display(frame_id, trajectory, xyz, pose_matrix_gt, fps, true);
+    }else {
+      display(frame_id, trajectory, xyz, fps);
+    }
+    cv::waitKey(1);
   }
 
   return 0;
