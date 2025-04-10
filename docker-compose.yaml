@@ -28,6 +28,8 @@ services:
       - /dev/snd:/dev/snd #X11 stuff
       - /dev/bus/usb:/dev/bus/usb
 
+      - ./Justfile.txt:/root/dev/Justfile
+      - ./calibration.txt:/root/dev/calibration
       - ./CMakeLists.txt:/root/dev/CMakeLists.txt
       - ./.clang-format:/root/dev/.clang-format
       - ./.gitignore:/root/dev/.gitignore

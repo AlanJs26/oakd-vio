@@ -49,7 +49,7 @@ void display(int frame_id, cv::Mat &trajectory, cv::Mat &pose, std::vector<Matri
 // Transformation
 // --------------------------------
 
-void integrateOdometryStereo(int frame_i, cv::Mat &rigid_body_transformation, cv::Mat &frame_pose, const cv::Mat &rotation, const cv::Mat &translation_stereo) {
+bool integrateOdometryStereo(int frame_i, cv::Mat &rigid_body_transformation, cv::Mat &frame_pose, const cv::Mat &rotation, const cv::Mat &translation_stereo) {
 
   // std::cout << "rotation" << rotation << std::endl;
   // std::cout << "translation_stereo" << translation_stereo << std::endl;
@@ -65,20 +65,20 @@ void integrateOdometryStereo(int frame_i, cv::Mat &rigid_body_transformation, cv
       sqrt((translation_stereo.at<double>(0)) * (translation_stereo.at<double>(0)) + (translation_stereo.at<double>(1)) * (translation_stereo.at<double>(1)) +
            (translation_stereo.at<double>(2)) * (translation_stereo.at<double>(2)));
 
-  // frame_pose = frame_pose * rigid_body_transformation;
   std::cout << "scale: " << scale << std::endl;
 
   rigid_body_transformation = rigid_body_transformation.inv();
-  // if ((scale>0.1)&&(translation_stereo.at<double>(2) > translation_stereo.at<double>(0)) && (translation_stereo.at<double>(2) >
-  // translation_stereo.at<double>(1)))
+
   // if (scale > 0.05 && scale < 10) {
   if (scale > 0.02 && scale < 10) {
     // if (scale < 10) {
     // std::cout << "Rpose" << Rpose << std::endl;
     frame_pose = frame_pose * rigid_body_transformation;
+    return true;
   } else {
     std::cout << "[WARNING] scale below 0.1, or incorrect translation" << std::endl;
   }
+  return false;
 }
 
 bool isRotationMatrix(cv::Mat &R) {

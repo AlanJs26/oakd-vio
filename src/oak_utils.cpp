@@ -48,7 +48,7 @@ OAKStereoQueue OAKStereoQueue::getOAKStereoQueue() {
 
   auto xoutTrackedFeaturesLeft = pipeline->create<dai::node::XLinkOut>();
   // auto xoutTrackedFeaturesRight = pipeline->create<dai::node::XLinkOut>();
-  auto xinTrackedFeaturesConfig = pipeline->create<dai::node::XLinkIn>();
+  // auto xinTrackedFeaturesConfig = pipeline->create<dai::node::XLinkIn>();
 
   // Name streams
   xoutLeft->setStreamName("left");
@@ -56,13 +56,13 @@ OAKStereoQueue OAKStereoQueue::getOAKStereoQueue() {
 
   xoutTrackedFeaturesLeft->setStreamName("trackedFeaturesLeft");
   // xoutTrackedFeaturesRight->setStreamName("trackedFeaturesRight");
-  xinTrackedFeaturesConfig->setStreamName("trackedFeaturesConfig");
+  // xinTrackedFeaturesConfig->setStreamName("trackedFeaturesConfig");
 
   // Properties
   monoLeft->setCamera("left");
-  monoLeft->setResolution(dai::MonoCameraProperties::SensorResolution::THE_400_P);
+  monoLeft->setResolution(dai::MonoCameraProperties::SensorResolution::THE_480_P);
   monoRight->setCamera("right");
-  monoRight->setResolution(dai::MonoCameraProperties::SensorResolution::THE_400_P);
+  monoRight->setResolution(dai::MonoCameraProperties::SensorResolution::THE_480_P);
 
   // Disable optical flow
   featureTrackerLeft->initialConfig.setMotionEstimator(false);
@@ -72,7 +72,7 @@ OAKStereoQueue OAKStereoQueue::getOAKStereoQueue() {
   monoLeft->out.link(featureTrackerLeft->inputImage);
   featureTrackerLeft->passthroughInputImage.link(xoutLeft->input);
   featureTrackerLeft->outputFeatures.link(xoutTrackedFeaturesLeft->input);
-  xinTrackedFeaturesConfig->out.link(featureTrackerLeft->inputConfig);
+  // xinTrackedFeaturesConfig->out.link(featureTrackerLeft->inputConfig);
 
   monoRight->out.link(xoutRight->input);
   // monoRight->out.link(featureTrackerRight->inputImage);

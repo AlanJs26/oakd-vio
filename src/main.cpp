@@ -19,8 +19,8 @@
 #include <opencv2/opencv.hpp>
 #include <unistd.h>
 
-#include "violib/src/visualOdometry.h"
 #include "violib/src/evaluate/evaluate_odometry.h"
+#include "violib/src/visualOdometry.h"
 
 #include "oak_utils.hpp"
 
@@ -62,7 +62,6 @@ void filterCommonFeatures(std::vector<dai::TrackedFeature> &vec1, std::vector<da
   vec2.erase(std::remove_if(vec2.begin(), vec2.end(), remove_unmatched), vec2.end());
 }
 
-
 int main(int argc, char **argv) {
   using namespace std;
 
@@ -88,8 +87,10 @@ int main(int argc, char **argv) {
   // OAK-D cameras queues
   OAKStereoQueue stereoQueue;
 
+  // clock_t t_A, t_B;
   // stereoQueue = OAKStereoQueue::getOAKStereoQueue();
   // while (true) {
+  //   t_A = clock();
   //   cv::Mat leftFrameColor, rightFrameColor;
   //
   //   auto [leftFrame, rightFrame] = stereoQueue.getLRFrames();
@@ -101,16 +102,22 @@ int main(int argc, char **argv) {
   //   cv::imshow("left", leftFrameColor);
   //
   //   int key = cv::waitKey(1);
+  //
+  //   t_B = clock();
+  //   float frame_time = 1000 * (double)(t_B - t_A) / CLOCKS_PER_SEC;
+  //   float fps = 1000 / frame_time;
+  //   cout << "[Info] frame times (ms): " << frame_time << endl;
+  //   cout << "[Info] FPS: " << fps << endl;
+  //
   //   if (key == 'q' || key == 'Q') {
   //     return 0;
   //   }
   // }
   // return 0;
 
-
   std::vector<Matrix> pose_matrix_gt;
   bool display_ground_truth = false;
-  if(argc == 4) {
+  if (argc == 4) {
     display_ground_truth = true;
     cerr << "Display ground truth trajectory" << endl;
     // load ground truth pose
@@ -141,7 +148,13 @@ int main(int argc, char **argv) {
   float fy = fSettings["Camera.fy"];
   float cx = fSettings["Camera.cx"];
   float cy = fSettings["Camera.cy"];
+
   float bf = fSettings["Camera.bf"];
+  if (bf == 0) {
+    float baseline = fSettings["Camera.baseline"];
+    bf = -baseline * fx;
+    cout << "Baseline: " << baseline << "  bf: " << bf << endl;
+  }
 
   cv::Mat projMatrl = (cv::Mat_<float>(3, 4) << fx, 0., cx, 0., 0., fy, cy, 0., 0, 0., 1., 0.);
   cv::Mat projMatrr = (cv::Mat_<float>(3, 4) << fx, 0., cx, bf, 0., fy, cy, 0., 0, 0., 1., 0.);
@@ -197,14 +210,12 @@ int main(int argc, char **argv) {
 
     std::cout << std::endl << "frame id " << frame_id << std::endl;
 
-
     // ------------
     // Load images
     // ------------
     cv::Mat imageRight_t1, imageLeft_t1;
     if (use_oakd) {
       features = stereoQueue.leftFeatures->get<dai::TrackedFeatures>()->trackedFeatures;
-      // features_t0 = stereoQueue.getTrackedFeatures();
       stereoQueue.getLRFrames(imageLeft_t1, imageRight_t1);
     } else {
       cv::Mat imageLeft_t1_color;
@@ -219,26 +230,7 @@ int main(int argc, char **argv) {
     // Extract Features
     // ----------------
 
-    // features_t1 = stereoQueue.getTrackedFeatures();
-
-    // normalizeFeatures(features_t0, features_t1);
-
-    // auto feature_vectors = {features_t0.left, features_t0.right, features_t1.left, features_t1.right};
-    // auto equal_sizes_iter = std::adjacent_find(feature_vectors.begin(), feature_vectors.end(),
-    //                                            [](std::vector<dai::TrackedFeature> a, std::vector<dai::TrackedFeature> b) { return a.size() != a.size(); });
-    //
-    // auto all_equal = equal_sizes_iter == feature_vectors.end();
-    //
-    // if (all_equal) {
-    //   std::cout << "All Equal" << std::endl;
-    // }
-
     std::vector<cv::Point2f> pointsLeft_t0, pointsRight_t0, pointsLeft_t1, pointsRight_t1;
-
-    // features2points(features_t0.left, pointsLeft_t0);
-    // features2points(features_t0.right, pointsRight_t0);
-    // features2points(features_t1.left, pointsLeft_t1);
-    // features2points(features_t1.right, pointsRight_t1);
 
     // cout << "pointsLeft_t0 -- size: " << pointsLeft_t0.size() << endl;
 
@@ -248,11 +240,9 @@ int main(int argc, char **argv) {
 
     if (currentVOFeatures.size() < 2000) {
       // append new features with old features
-
       if (use_oakd) {
         for (auto &feature : features) {
           currentVOFeatures.points.push_back(cv::Point2f(feature.position.x, feature.position.y));
-          // currentVOFeatures.ages.push_back(feature.age);
           currentVOFeatures.ages.push_back(0);
         }
       } else {
@@ -264,20 +254,19 @@ int main(int argc, char **argv) {
 
     if (currentVOFeatures.points.size() > 0) {
       matchingFeatures(imageLeft_t0, imageRight_t0,   // image at previous iteration
-                      imageLeft_t1, imageRight_t1,   // image at current iteration
-                      currentVOFeatures,             // Features
-                      pointsLeft_t0, pointsRight_t0, // points at previous iteration
-                      pointsLeft_t1, pointsRight_t1  // points at current iteration
+                       imageLeft_t1, imageRight_t1,   // image at current iteration
+                       currentVOFeatures,             // Features
+                       pointsLeft_t0, pointsRight_t0, // points at previous iteration
+                       pointsLeft_t1, pointsRight_t1  // points at current iteration
       );
     }
-
-    imageLeft_t0 = imageLeft_t1;
-    imageRight_t0 = imageRight_t1;
 
     // ---------------------
     // Triangulate 3D Points
     // ---------------------
 
+    imageLeft_t0 = imageLeft_t1;
+    imageRight_t0 = imageRight_t1;
     if (pointsLeft_t0.size() < 4 || currentVOFeatures.points.size() == 0) {
       cout << "Insufficient features found! Skiping iteration" << endl;
     } else {
@@ -316,10 +305,11 @@ int main(int argc, char **argv) {
       cv::Mat rigid_body_transformation;
 
       if (abs(rotation_euler[1]) < 0.1 && abs(rotation_euler[0]) < 0.1 && abs(rotation_euler[2]) < 0.1) {
-        integrateOdometryStereo(frame_id, rigid_body_transformation, frame_pose, rotation, translation);
-
+        if (integrateOdometryStereo(frame_id, rigid_body_transformation, frame_pose, rotation, translation)) {
+          // imageLeft_t0 = imageLeft_t1;
+          // imageRight_t0 = imageRight_t1;
+        }
       } else {
-
         std::cout << "Too large rotation" << std::endl;
       }
     }
@@ -338,19 +328,13 @@ int main(int argc, char **argv) {
     cv::Mat xyz = frame_pose.col(3).clone();
     std::cout << xyz.at<double>(0) << ", " << xyz.at<double>(1) << ", " << xyz.at<double>(2) << std::endl;
 
-    cv::putText(
-        imageLeft_t1,
-        cv::format("%f, %f, %f", xyz.at<double>(0), xyz.at<double>(1), xyz.at<double>(2)),
-        cv::Point2d(20, 100),
-        cv::FONT_HERSHEY_SIMPLEX,
-        1,
-        cv::Scalar(0,255,0),
-        4);
+    cv::putText(imageLeft_t1, cv::format("%f, %f, %f", xyz.at<double>(0), xyz.at<double>(1), xyz.at<double>(2)), cv::Point2d(20, 100), cv::FONT_HERSHEY_SIMPLEX,
+                1, cv::Scalar(0, 255, 0), 4);
     displayTracking(imageLeft_t1, pointsLeft_t0, pointsLeft_t1);
 
     if (display_ground_truth) {
       display(frame_id, trajectory, xyz, pose_matrix_gt, fps, true);
-    }else {
+    } else {
       display(frame_id, trajectory, xyz, fps);
     }
     cv::waitKey(1);
