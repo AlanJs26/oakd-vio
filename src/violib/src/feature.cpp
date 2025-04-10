@@ -34,7 +34,7 @@ void deleteUnmatchFeatures(std::vector<cv::Point2f> &points0, std::vector<cv::Po
 void featureDetectionFast(cv::Mat image, std::vector<cv::Point2f> &points) {
   // uses FAST as for feature dection, modify parameters as necessary
   std::vector<cv::KeyPoint> keypoints;
-  int fast_threshold = 20;
+  int fast_threshold = 1;
   bool nonmaxSuppression = true;
   cv::FAST(image, keypoints, fast_threshold, nonmaxSuppression);
   cv::KeyPoint::convert(keypoints, points, std::vector<int>());

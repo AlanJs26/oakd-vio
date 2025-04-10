@@ -37,3 +37,8 @@ target_link_libraries(feature_detector PUBLIC depthai::opencv ${OpenCV_LIBS})
 add_executable(calibration_reader examples/calibration_reader.cpp)
 # Link with libraries
 target_link_libraries(calibration_reader PUBLIC depthai::opencv ${OpenCV_LIBS})
+
+# Add source files
+add_executable(save_images examples/save_images.cpp)
+# Link with libraries
+target_link_libraries(save_images PUBLIC depthai::opencv ${OpenCV_LIBS})

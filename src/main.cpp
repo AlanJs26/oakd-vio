@@ -8,7 +8,6 @@
 #include <filesystem>
 #include <iostream>
 #include <iterator>
-#include <opencv2/highgui.hpp>
 #include <vector>
 
 // include depthai library
@@ -16,6 +15,7 @@
 
 // include opencv library (Optional, used only for the following example)
 #include <opencv2/core/types.hpp>
+#include <opencv2/highgui.hpp>
 #include <opencv2/opencv.hpp>
 #include <unistd.h>
 
@@ -37,29 +37,6 @@ void features2points(std::vector<dai::TrackedFeature> &features, std::vector<cv:
   for (auto feature : features) {
     points.push_back(cv::Point2f(feature.position.x, feature.position.y));
   }
-}
-
-void filterCommonFeatures(std::vector<dai::TrackedFeature> &vec1, std::vector<dai::TrackedFeature> &vec2) {
-  // Criar conjuntos de IDs
-  std::unordered_set<int> ids1, ids2;
-  for (const auto &f : vec1)
-    ids1.insert(f.id);
-  for (const auto &f : vec2)
-    ids2.insert(f.id);
-
-  // Encontrar interseção dos IDs
-  std::unordered_set<int> common_ids;
-  for (int id : ids1) {
-    if (ids2.find(id) != ids2.end()) {
-      common_ids.insert(id);
-    }
-  }
-
-  // Remover elementos que não estão na interseção
-  auto remove_unmatched = [&](const dai::TrackedFeature &f) { return common_ids.find(f.id) == common_ids.end(); };
-
-  vec1.erase(std::remove_if(vec1.begin(), vec1.end(), remove_unmatched), vec1.end());
-  vec2.erase(std::remove_if(vec2.begin(), vec2.end(), remove_unmatched), vec2.end());
 }
 
 int main(int argc, char **argv) {
@@ -240,7 +217,7 @@ int main(int argc, char **argv) {
 
     if (currentVOFeatures.size() < 2000) {
       // append new features with old features
-      if (use_oakd) {
+      if (use_oakd && false) {
         for (auto &feature : features) {
           currentVOFeatures.points.push_back(cv::Point2f(feature.position.x, feature.position.y));
           currentVOFeatures.ages.push_back(0);

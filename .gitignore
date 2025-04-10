@@ -6,6 +6,8 @@ build*/*
 # Auto-generated
 shared/version.hpp
 
+dataset/
+
 #pybind11
 build/
 dist/
